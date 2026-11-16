@@ -4,6 +4,26 @@ const key='furnifold.studio.v1';
 const uid=()=>crypto.randomUUID?.() || String(Date.now())+Math.random();
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const types={Living:'#f0eee8',Bedroom:'#f0ece9',Kitchen:'#f5f1ea',Bathroom:'#edf0f3',Hallway:'#f1f0f4',Other:'#f3f3f2'};
+const iconPaths={
+  projects:'M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z',
+  draw:'M4 4h16v16H4z M4 11h8v9 M12 11h8',
+  upload:'M12 15V3m-5 5 5-5 5 5 M4 15v5h16v-5',
+  templates:'M3 3h8v8H3z M13 3h8v8h-8z M3 13h8v8H3z M13 13h8v8h-8z',
+  plus:'M12 5v14M5 12h14',
+  arrow:'M5 12h14m-6-6 6 6-6 6',
+  logout:'M10 4H4v16h6m3-8h8m-3-3 3 3-3 3',
+  Living:'M3 12V8a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v4 M3 12a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v6H3z M5 18v2m14-2v2',
+  Bedroom:'M3 18V6m18 12v-5a3 3 0 0 0-3-3H3m0 6h18M6 10V7h5v3',
+  Kitchen:'M4 4h16v16H4z M4 9h16 M8 6.5h.01m4 0h.01 M7 12h10v5H7z',
+  Bathroom:'M3 12h18v2a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z M6 12V6a2 2 0 0 1 4 0m-2 0h4 M7 18l-1 2m11-2 1 2',
+  Hallway:'M3 7h18M3 17h18m-7-7 2 2-2 2m2-2H8',
+  Other:'M4 4h16v16H4z M8 12h8 M12 8v8'
+};
+const icon=name=>'<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+iconPaths[name]+'"/></svg>';
+const roomNames={Living:'Living room',Bedroom:'Bedroom',Kitchen:'Kitchen',Bathroom:'Bathroom',Hallway:'Hallway',Other:'Other room'};
+const roomSizes={Living:[4500,3500],Bedroom:[3500,3000],Kitchen:[3000,2400],Bathroom:[2000,1800],Hallway:[1400,3000],Other:[2500,2500]};
+const roomTiles=()=>Object.keys(roomNames).map(type=>'<button class="room-tile" data-type="'+type+'" draggable="true">'+icon(type)+'<span>'+roomNames[type]+'</span></button>').join('');
+
 const area=(w,h)=>w*h/1e6;
 const sqm=n=>new Intl.NumberFormat('en',{maximumFractionDigits:2}).format(n)+' m²';
 const roomKey=(p,r)=>'furnifold.project-room.'+p.id+'-'+r.id;
@@ -45,10 +65,11 @@ function plan(p,thumb=false){
   const pad=Math.max(p.w,p.h)*.08;
   const scale=Math.max(p.w,p.h)/10000;
   return '<svg class="floor" viewBox="'+[-pad,-pad,p.w+pad*2,p.h+pad*2].join(' ')+'" role="img" aria-label="'+esc(p.name)+' floor plan"><rect class="boundary" width="'+p.w+'" height="'+p.h+'" fill="#f9f8f2"/>'+
+    (p.reference&&!thumb&&p.showReference!==false?'<image href="'+esc(p.reference)+'" width="'+p.w+'" height="'+p.h+'" preserveAspectRatio="none" opacity=".57" pointer-events="none"/>':'')+
     p.rooms.map(r=>{
       const fs=Math.min(290*scale,r.w/(Math.max(9,r.name.length)*.57),r.h*.17);
       const items=thumb?[]:furniture(p,r);
-      return '<g '+(thumb?'':'data-room="'+r.id+'"')+' class="space '+(!thumb&&r.id===rid?'chosen':'')+'"><rect class="room-fill" x="'+r.x+'" y="'+r.y+'" width="'+r.w+'" height="'+r.h+'" fill="'+types[r.type]+'"/>'+
+      return '<g '+(thumb?'':'data-room="'+r.id+'"')+' class="space '+(!thumb&&p.reference&&p.showReference!==false?'tracing ':'')+(!thumb&&r.id===rid?'chosen':'')+'"><rect class="room-fill" x="'+r.x+'" y="'+r.y+'" width="'+r.w+'" height="'+r.h+'" fill="'+types[r.type]+'"/>'+
       items.map(i=>{const [w,h]=dimension(i);return '<rect class="furniture" x="'+(r.x+i.x)+'" y="'+(r.y+i.y)+'" width="'+w+'" height="'+h+'" rx="65"/>';}).join('')+
       '<text x="'+(r.x+r.w/2)+'" y="'+(r.y+r.h/2)+'" font-size="'+fs+'">'+esc(r.name)+'</text>'+
       (thumb?'':'<text class="room-area" x="'+(r.x+r.w/2)+'" y="'+(r.y+r.h/2+fs*1.2)+'" font-size="'+fs*.73+'">'+sqm(area(r.w,r.h))+'</text>')+'</g>';
@@ -97,10 +118,11 @@ function selectRoom(r){
 function roomDetails(p,r){
   if(!r)return '<h2>Floor plan</h2><p>Select a room to edit its dimensions or furnish it.</p>';
   const footprint=furniture(p,r).filter(i=>i.kind!=='rug').reduce((sum,i)=>sum+area(i.w,i.h),0);
-  return '<h2>'+esc(r.name)+'</h2><p>'+r.type+'</p><dl><dt>Inside dimensions</dt><dd>'+r.w/1000+' × '+r.h/1000+' m</dd><dt>Room area</dt><dd>'+sqm(area(r.w,r.h))+'</dd><dt>Furniture footprints</dt><dd>'+sqm(footprint)+'</dd></dl>'+button('room','Open room editor →','primary wide')+button('edit','Edit room dimensions','wide');
+  return '<h2>'+esc(r.name)+'</h2><p>'+r.type+'</p><dl><dt>Inside dimensions</dt><dd>'+r.w/1000+' × '+r.h/1000+' m</dd><dt>Room area</dt><dd>'+sqm(area(r.w,r.h))+'</dd><dt>Furniture footprints</dt><dd>'+sqm(footprint)+'</dd></dl>'+button('room','Edit room layout →','primary wide')+button('edit','Edit room dimensions','wide')+(mode==='3D'?button('focus-room','Focus in 3D','wide'):'');
 }
 const button=(action,label,cls='')=>'<button class="'+cls+'" data-do="'+action+'">'+label+'</button>';
-const brand='<div class="brand"><span class="logo" aria-hidden="true">◩</span> Furnifold</div>';
+const brand='<div class="brand"><span class="logo">'+icon('draw')+'</span> Furnifold</div>';
+const nav=(key,label,glyph,current=false)=>'<button data-do="'+key+'" '+(current?'class="active" aria-current="page"':'')+'>'+icon(glyph)+'<span>'+label+'</span></button>';
 function render(){
   const version=++renderVersion;
   sandbox?.dispose();sandbox=null;
@@ -109,7 +131,7 @@ function render(){
     return;
   }
   const p=project(),r=room();
-  const shell='<aside class="rail">'+brand+'<nav>'+button('projects','<span>▦</span> Projects',page!=='Templates'?'active':'')+button('templates','<span>◇</span> Templates',page==='Templates'?'active':'')+'</nav><div class="account"><span class="avatar">D</span><div><strong>Demo workspace</strong><small>Browser storage</small></div>'+button('logout','↗','signout')+'</div></aside>';
+  const shell='<aside class="rail">'+brand+'<nav aria-label="Workspace"><div class="nav-section"><small>Workspace</small>'+nav('projects','Projects','projects',page!=='Templates')+'</div><div class="nav-section"><small>Create</small>'+nav('create','Draw floor plan','draw')+nav('import','Import floor plan','upload')+'</div><div class="nav-section"><small>Library</small>'+nav('templates','Templates','templates',page==='Templates')+'</div></nav><div class="account"><span class="avatar">D</span><div><strong>Demo workspace</strong><small>Browser storage</small></div><button data-do="logout" class="signout" aria-label="Sign out">'+icon('logout')+'</button></div></aside>';
   let body;
   if(page==='Room'&&p&&r){
     const query=new URLSearchParams({room:p.id+'-'+r.id,w:r.w,h:r.h,name:r.name});
@@ -117,26 +139,37 @@ function render(){
   }else if(page==='Floor'&&p){
     const used=p.rooms.reduce((sum,r)=>sum+area(r.w,r.h),0);
     body='<header class="bar">'+button('projects','← Projects','plain')+'<span>/</span><strong>'+esc(p.name)+'</strong><span class="grow"></span>'+button('settings','Floor dimensions')+'</header>'+
-      '<div class="floor-head"><div><h1>'+esc(p.name)+'</h1><p>'+p.kind+' · '+p.rooms.length+' '+(p.rooms.length===1?'room':'rooms')+'</p></div>'+button('add','＋ Add room','primary')+'</div>'+
-      '<div class="workbench"><aside class="room-list"><h2>Rooms</h2>'+(p.rooms.length?p.rooms.map(r=>'<button class="room-row '+(r.id===rid?'active':'')+'" data-select="'+r.id+'"><i style="background:'+types[r.type]+'"></i><span>'+esc(r.name)+'</span><small>'+sqm(area(r.w,r.h))+'</small></button>').join(''):'<p>Add a room to start your plan.</p>')+'</aside>'+
-      '<section class="workcanvas"><header><div class="view">'+button('2D','2D plan',mode==='2D'?'active':'')+button('3D','3D sandbox',mode==='3D'?'active':'')+'</div>'+(mode==='3D'?button('reset-view','Reset view'):'<small>Top view · dimensions in metres</small>')+'</header>'+(mode==='3D'?'<div id="sandbox" class="webgl"><p id="sandbox-status" role="status">Loading 3D canvas…</p></div><div class="catalog-tray"><h2>Furniture</h2><p>Drag into a room, or select an item and click to place it.</p><div id="sandbox-catalog"></div></div>':'<div class="drawing">'+plan(p)+'</div>')+'<footer><span>'+sqm(area(p.w,p.h))+' floor envelope</span><span>'+sqm(used)+' assigned to rooms</span></footer></section>'+
+      '<div class="floor-head"><div><h1>'+esc(p.name)+'</h1><p>'+p.kind+' · '+p.rooms.length+' '+(p.rooms.length===1?'room':'rooms')+'</p></div>'+'</div>'+
+      '<div class="workbench"><aside class="room-list">'+(mode==='2D'?'<section class="room-tools"><h2>Add rooms</h2><p>Drag a tile onto the plan or click to set dimensions.</p><div class="room-tiles">'+roomTiles()+'</div></section>':'')+'<h2>Rooms</h2>'+(p.rooms.length?p.rooms.map(r=>'<button class="room-row '+(r.id===rid?'active':'')+'" data-select="'+r.id+'"><i style="background:'+types[r.type]+'"></i><span>'+esc(r.name)+'</span><small>'+sqm(area(r.w,r.h))+'</small></button>').join(''):'<p>Add a room to start your plan.</p>')+'</aside>'+
+      '<section class="workcanvas"><header><div class="view">'+button('2D','2D plan',mode==='2D'?'active':'')+button('3D','3D sandbox',mode==='3D'?'active':'')+'</div>'+(mode==='3D'?button('reset-view','Reset view'):p.reference?button('toggle-reference',p.showReference===false?'Show reference':'Hide reference'):'<small>Dimensions in metres</small>')+'</header>'+(mode==='3D'?'<div id="sandbox" class="webgl"><p id="sandbox-status" role="status">Loading 3D canvas…</p></div><div class="catalog-tray"><h2>Furniture</h2><p>Drag into a room, or select an item and click to place it.</p><div id="sandbox-catalog"></div></div>':'<div class="drawing" id="plan-drop">'+plan(p)+'</div>')+'<footer><span>'+sqm(area(p.w,p.h))+' floor envelope</span><span>'+sqm(used)+' assigned to rooms</span></footer></section>'+
       '<aside class="properties">'+roomDetails(p,r)+'</aside></div>';
   }else{
     const templates=page==='Templates';
-    body='<header class="bar"><strong>'+page+'</strong><span class="grow"></span>'+(storageError?'<span role="alert">Browser saving unavailable</span>':'')+button('create','＋ New project','primary')+'</header><div class="dashboard">'+
-      '<section class="banner"><div><h1>'+ (templates?'Start with a floor plan.':'Design your space.')+'</h1><p>Lay out a whole home, then plan the details room by room.</p>'+button('create','＋ New project','primary')+button('sample','Explore sample apartment')+'</div><div class="banner-art">'+plan(preview,true)+'</div></section>'+
-      '<h2>'+(templates?'Floor plan templates':'Your projects')+'</h2><div class="cards">'+(templates?'<button class="project-card" data-do="sample"><div class="thumb">'+plan(preview,true)+'</div><strong>Linden Apartment</strong><small>Apartment · 5 rooms</small></button>':projects.map(p=>'<button class="project-card" data-open="'+p.id+'"><div class="thumb">'+plan(p,true)+'</div><strong>'+esc(p.name)+'</strong><small>'+p.kind+' · '+p.rooms.length+' '+(p.rooms.length===1?'room':'rooms')+' · '+sqm(area(p.w,p.h))+'</small></button>').join('')+'<button class="new-card" data-do="create"><span>＋</span> Create a project</button>')+'</div></div>';
+    const entry=(action,glyph,title,description)=>'<button class="start-card" data-do="'+action+'"><span class="start-icon">'+icon(glyph)+'</span><span><strong>'+title+'</strong><small>'+description+'</small></span>'+icon('arrow')+'</button>';
+    const cards=templates?'<button class="project-card" data-do="sample"><div class="thumb">'+plan(preview,true)+'</div><strong>Linden Apartment</strong><small>Apartment · 5 rooms</small></button>':projects.map(p=>'<button class="project-card" data-open="'+p.id+'"><div class="thumb">'+plan(p,true)+'</div><strong>'+esc(p.name)+'</strong><small>'+p.kind+' · '+p.rooms.length+' '+(p.rooms.length===1?'room':'rooms')+' · '+sqm(area(p.w,p.h))+'</small></button>').join('');
+    body='<header class="bar"><strong>'+page+'</strong><span class="grow"></span>'+(storageError?'<span role="alert">Browser saving unavailable</span>':'')+button('create',icon('plus')+' New project','primary with-icon')+'</header><div class="dashboard"><section class="dashboard-intro"><h1>'+(templates?'Floor plan templates':'What will you design today?')+'</h1><p>'+(templates?'Start with a furnished layout you can edit.':'Build a whole-home floor plan and work through it room by room.')+'</p></section>'+
+      (templates?'':'<div class="start-grid">'+entry('create','draw','Draw a floor plan','Start with a measured canvas.')+entry('import','upload','Import a floor plan','Trace a drawing or scan to scale.')+entry('templates','templates','Use a template','Explore a furnished sample.')+'</div>')+
+      '<div class="gallery-head"><h2>'+(templates?'Available templates':'Your projects')+'</h2></div><div class="cards">'+cards+(templates?'':button('create',icon('plus')+' Create a project','new-card'))+'</div></div>';
   }
   app.innerHTML='<div class="shell">'+shell+'<main class="workspace">'+body+'</main></div>';
   if(page==='Floor'&&p&&mode==='3D')mountSandbox(p,version);
 }
 function form(title,fields,cta,apply){
   modal.innerHTML='<form><h2>'+title+'</h2>'+fields+'<p class="error" role="alert"></p><footer><button type="button" data-do="cancel">Cancel</button><button class="primary">'+cta+'</button></footer></form>';
-  modal.querySelector('form').onsubmit=e=>{
+  const formNode=modal.querySelector('form');
+  formNode.onsubmit=async e=>{
     e.preventDefault();
-    const error=apply(new FormData(e.currentTarget));
-    if(error){modal.querySelector('.error').textContent=error;return;}
-    modal.close();finish();
+    const submit=formNode.querySelector('.primary');
+    submit.disabled=true;
+    modal.dataset.busy='true';
+    try{
+      const error=await apply(new FormData(formNode));
+      if(error){formNode.querySelector('.error').textContent=error;return;}
+      if(modal.open)modal.close();
+      finish();
+    }catch{
+      formNode.querySelector('.error').textContent='Could not read or save the floor plan. Try a smaller PNG or JPEG.';
+    }finally{submit.disabled=false;delete modal.dataset.busy;}
   };
   modal.showModal();
 }
@@ -145,23 +178,43 @@ const number=(label,name,value,min=.01)=>'<label>'+label+' (m)<input name="'+nam
 const pair=(a,b)=>'<div class="pair">'+a+b+'</div>';
 const size=(w,h)=>pair(number('Width','w',w,1),number('Depth','h',h,1));
 const mm=(d,k)=>Math.round(Number(d.get(k))*1000);
-function projectForm(existing){
+async function referenceImage(file){
+  if(!file?.size||file.size>10000000||!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Invalid plan image');
+  const image=await createImageBitmap(file);
+  const canvas=document.createElement('canvas');
+  const scale=Math.min(1,1400/Math.max(image.width,image.height));
+  canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));
+  try{
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(image,0,0,canvas.width,canvas.height);
+    return canvas.toDataURL('image/jpeg',.78);
+  }finally{image.close();}
+}
+function projectForm(existing,importing=false){
   const p=existing?project():null;
-  form(existing?'Floor dimensions':'New project',nameInput(p?.name||'')+'<label>Project type<select name="kind">'+['Apartment','House','Individual room'].map(x=>'<option '+(p?.kind===x?'selected':'')+'>'+x+'</option>').join('')+'</select></label>'+size(p?.w||10000,p?.h||8000),'Save project',d=>{
+  form(existing?'Floor dimensions':importing?'Import a floor plan':'Draw a floor plan',nameInput(p?.name||'')+'<label>Project type<select name="kind">'+['Apartment','House','Individual room'].map(x=>'<option '+(p?.kind===x?'selected':'')+'>'+x+'</option>').join('')+'</select></label>'+size(p?.w||10000,p?.h||8000)+(importing?'<label>Floor plan image<input type="file" name="reference" accept="image/png,image/jpeg,image/webp" required></label><p>Crop to the outside edges first. Enter the real width and depth of that rectangle.</p>':''),existing?'Save changes':importing?'Import plan':'Create project',async d=>{
     const name=String(d.get('name')).trim(), w=mm(d,'w'),h=mm(d,'h'),kind=d.get('kind');
     if(!name)return 'Enter a project name.';
     if(p?.rooms.some(r=>r.x+r.w>w||r.y+r.h>h))return 'The new dimensions cut through a room. Move or resize those rooms first.';
     if(p) Object.assign(p,{name,w,h,kind});
     else {
       const id=uid(), rooms=kind==='Individual room'?[{id:uid(),type:'Other',name,x:0,y:0,w,h}]:[];
-      projects.unshift({id,name,w,h,kind,rooms});pid=id;rid=rooms[0]?.id??null;mode='2D';page='Floor';
+      if(importing&&kind==='Individual room')return 'Choose House or Apartment for a whole-floor reference.';
+      const reference=importing?await referenceImage(d.get('reference')):null;
+      const next={id,name,w,h,kind,rooms,...(reference?{reference}:{})};
+      if(importing)localStorage.setItem(key,JSON.stringify([next,...projects]));
+      projects.unshift(next);pid=id;rid=rooms[0]?.id??null;mode='2D';page='Floor';
     }
   });
 }
-function roomForm(existing){
+function roomForm(existing,type='Living',position=null){
   const p=project(),r=existing?room():null;
-  form(existing?'Edit room':'Add room',nameInput(r?.name||'')+'<label>Room type<select name="type">'+Object.keys(types).map(x=>'<option '+(r?.type===x?'selected':'')+'>'+x+'</option>').join('')+'</select></label>'+
-    size(r?.w||Math.min(p.w,4000),r?.h||Math.min(p.h,3500))+pair(number('X from left','x',r?.x||0,0),number('Y from top','y',r?.y||0,0)),existing?'Save room':'Add room',d=>{
+  const [defaultW,defaultH]=roomSizes[type];
+  const w=Math.min(p.w,defaultW),h=Math.min(p.h,defaultH);
+  const x=Math.max(0,Math.min(p.w-w,position?.x??0)),y=Math.max(0,Math.min(p.h-h,position?.y??0));
+  form(existing?'Edit room':'Add room',nameInput(r?.name||roomNames[type])+'<label>Room type<select name="type">'+Object.keys(types).map(x=>'<option '+((r?.type??type)===x?'selected':'')+'>'+x+'</option>').join('')+'</select></label>'+
+    size(r?.w??w,r?.h??h)+pair(number('X from left','x',r?.x??x,0),number('Y from top','y',r?.y??y,0)),existing?'Save room':'Add room',d=>{
     const next={id:r?.id||uid(),name:String(d.get('name')).trim(),type:d.get('type'),w:mm(d,'w'),h:mm(d,'h'),x:mm(d,'x'),y:mm(d,'y')};
     if(!next.name)return 'Enter a room name.';
     if(!fit(p,next))return 'Place the room inside the floor and clear of other rooms.';
@@ -170,9 +223,10 @@ function roomForm(existing){
   });
 }
 document.addEventListener('click',e=>{
-  const target=e.target.closest('[data-do],[data-open],[data-select],[data-room],[data-model]');
+  const target=e.target.closest('[data-do],[data-open],[data-select],[data-room],[data-model],[data-type]');
   if(!target)return;
   const d=target.dataset;
+  if(d.type&&roomSizes[d.type])return roomForm(false,d.type);
   if(d.model!==undefined){sandbox?.arm(Number(d.model));return;}
   if(d.open){pid=d.open;rid=null;mode='2D';page='Floor';render();return;}
   if(d.select||d.room){rid=d.select||d.room;if(sandbox)selectRoom(room());else render();return;}
@@ -183,10 +237,13 @@ document.addEventListener('click',e=>{
     case 'templates': page='Templates';break;
     case 'sample': {const p=example();seed(p);projects.unshift(p);pid=p.id;rid=p.rooms[0].id;mode='2D';page='Floor';finish();return;}
     case 'create': return projectForm(false);
+    case 'import': return projectForm(false,true);
+    case 'toggle-reference': project().showReference=project().showReference===false;finish();return;
+    case 'focus-room': return sandbox?.focus(room());
     case 'settings': return projectForm(true);
     case 'add': return roomForm(false);
     case 'edit': return roomForm(true);
-    case 'cancel': return modal.close();
+    case 'cancel': if(!modal.dataset.busy)modal.close();return;
     case 'floor': page='Floor';break;
     case 'room': page='Room';break;
     case '2D': case '3D': mode=d.do;break;
@@ -195,7 +252,29 @@ document.addEventListener('click',e=>{
   }
   render();
 });
+modal.addEventListener('cancel',e=>{if(modal.dataset.busy)e.preventDefault();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.open)sandbox?.cancel();});
+app.addEventListener('dragstart',e=>{
+  const tile=e.target.closest('[data-type]');
+  if(!tile)return;
+  e.dataTransfer.setData('application/x-furnifold-room',tile.dataset.type);
+  e.dataTransfer.effectAllowed='copy';
+});
+app.addEventListener('dragover',e=>{
+  if(e.target.closest('#plan-drop')&&e.dataTransfer.types.includes('application/x-furnifold-room')){
+    e.preventDefault();e.dataTransfer.dropEffect='copy';
+  }
+});
+app.addEventListener('drop',e=>{
+  const panel=e.target.closest('#plan-drop'),type=e.dataTransfer.getData('application/x-furnifold-room');
+  if(!panel||!Object.hasOwn(roomSizes,type))return;
+  e.preventDefault();
+  const matrix=panel.querySelector('svg').getScreenCTM()?.inverse();
+  if(!matrix)return;
+  const point=new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix);
+  const snap=value=>Math.round(value/100)*100;
+  roomForm(false,type,{x:snap(point.x),y:snap(point.y)});
+});
 let drag=null,suppressClick=false;
 app.addEventListener('pointerdown',e=>{
   const node=e.target.closest('[data-room]');

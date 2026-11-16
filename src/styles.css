@@ -1,9 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
 :root {
-  font-family: 'Instrument Sans', system-ui, sans-serif;
+  font-family: Inter, system-ui, sans-serif;
   color: #252a27;
   background: #fff;
-  --paper:#fff; --line:#e8e9eb; --green:#173a32; --muted:#62685f;
+  --paper:#fff; --line:#e8e9eb; --green:#21222a; --muted:#62685f;
   --mono:'IBM Plex Mono', ui-monospace, monospace;
 }
 * { box-sizing:border-box; }
@@ -35,7 +35,7 @@ p { margin:7px 0 0; font-size:13px; color:var(--muted); line-height:1.5; }
 .button,.icon,.segments button,select { border:1px solid var(--line); border-radius:8px; background:var(--paper); padding:8px 11px; font-size:13px; font-weight:600; }
 .button:not(:disabled):hover,.icon:not(:disabled):hover { background:#efeee7; }
 .button.primary { background:var(--green); color:#fff; border-color:var(--green); }
-.button.primary:hover { background:#255347; }
+.button.primary:hover { background:#363743; }
 .full { width:100%; }
 .icon { padding:5px 9px; font-size:16px; }
 #layouts { display:grid; gap:4px; margin-top:9px; }

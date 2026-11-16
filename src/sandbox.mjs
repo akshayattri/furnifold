@@ -198,6 +198,17 @@ export function startSandbox(host,{project,getItems,commit,select,status}){
     arm(index){armed=index;status('Click inside a room to place '+models[index].name.toLowerCase()+'.');},
     cancel(){armed=null;status('Placement cancelled.');},
     reset,
+    focus(room){
+      if(!room)return;
+      armed=null;
+      const distance=metres(Math.max(room.w,room.h));
+      const x=metres(room.x+room.w/2),z=metres(room.y+room.h/2);
+      controls.target.set(x,0,z);
+      camera.position.set(x+distance*.7,distance*.9,z+distance*.72);
+      controls.update();
+      camera.updateMatrixWorld();
+      status('Focused on '+room.name+' · Reset view to see the whole floor.');
+    },
     dispose(){
       resize.disconnect();renderer.setAnimationLoop(null);controls.dispose();
       for(const [name,fn] of Object.entries(events))canvas.removeEventListener(name,fn,name==='pointerdown');
