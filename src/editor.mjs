@@ -1,14 +1,29 @@
 import {sample,catalog,footprint,issues,factor,amount,measure} from './model.mjs';
 
 const $ = id => document.getElementById(id);
-const key = 'furnifold.room.v1';
+const params = new URLSearchParams(location.search);
+const projectRoom = params.get('room');
+const key = projectRoom ? 'furnifold.project-room.' + projectRoom : 'furnifold.room.v1';
 let room = sample(), view = 'Plan', selected = null, zone = null, against = 1;
 let drag = null, storageError = false;
+if (projectRoom) {
+  const w = Number(params.get('w')), h = Number(params.get('h'));
+  if (w >= 1000 && h >= 1000 && w <= 50000 && h <= 50000) {
+    room = {version:1,name:params.get('name')||'Room',w,h,door:0,window:false,unit:'cm',active:0,
+      layouts:[{name:'Current setup',items:[]}]};
+  }
+  document.body.classList.add('embedded');
+}
 const past = [], future = [];
 try {
   const saved = JSON.parse(localStorage.getItem(key) || 'null');
   if (saved?.version === 1 && saved.layouts?.[saved.active] && saved.w > 0 && saved.h > 0) room = saved;
 } catch { storageError = true; }
+if (projectRoom) {
+  room.w = Number(params.get('w')) || room.w;
+  room.h = Number(params.get('h')) || room.h;
+  room.name = params.get('name') || room.name;
+}
 
 const layout = () => room.layouts[room.active];
 const current = () => layout().items.find(item=>item.id===selected);
@@ -115,9 +130,9 @@ function render() {
   const picker='<label class="picker">Furniture<select id="pick-piece"><option value="">Select an item</option>'+layout().items.map(p=>'<option value="'+escape(p.id)+'" '+(p.id===selected?'selected':'')+'>'+escape(p.name)+'</option>').join('')+'</select></label>';
   if (!item) $('inspector').innerHTML='<h2>Inspector</h2><p>Select furniture on the plan to edit its size and position.</p>';
   else {
-    const fields=[['Width','w'],['Depth','h'],['X position','x'],['Y position','y']];
+    const fields=[['Width','w'],['Depth','h'],['Height','z'],['X position','x'],['Y position','y']];
     $('inspector').innerHTML='<h2>Inspector</h2><h3>'+escape(item.name)+'</h3><div class="fields">'+fields.map(([title,field])=>
-      '<label>'+title+' ('+room.unit+')<input data-field="'+field+'" type="number" step="any" value="'+amount(item[field],room.unit)+'" '+(item.locked?'disabled':'')+'></label>').join('')+
+      '<label>'+title+' ('+room.unit+')<input data-field="'+field+'" type="number" step="any" value="'+amount(item[field] ?? ({bed:620,chair:850,storage:2100,sofa:820,desk:750}[item.kind] || 700),room.unit)+'" '+(item.locked?'disabled':'')+'></label>').join('')+
       '</div><label class="toggle"><input data-field="owned" type="checkbox" '+(item.owned?'checked':'')+'> Already owned</label>'+
       '<label class="toggle"><input data-field="locked" type="checkbox" '+(item.locked?'checked':'')+'> Lock placement</label>'+
       '<div class="item-actions"><button class="button" data-action="rotate" '+(item.locked?'disabled':'')+'>↻ Rotate</button><button class="button remove" data-action="remove" '+(item.locked?'disabled':'')+'>Remove</button></div>';
@@ -229,9 +244,9 @@ $('inspector').addEventListener('change',event=>{
   if (!item || !field) return;
   if (input.type==='checkbox') {change(()=>{item[field]=input.checked;});return;}
   const value=Math.round(input.valueAsNumber*factor(room.unit));
-  const size=field==='w'||field==='h';
-  if (!Number.isFinite(value) || Math.abs(value)>50000 || (size && value<100)) {
-    input.setCustomValidity(size?'Enter a size between '+measure(100,room.unit)+' and '+measure(50000,room.unit)+'.':'Enter a position within '+measure(50000,room.unit)+' of the origin.');
+  const size=field==='w'||field==='h'||field==='z';
+  if (!Number.isFinite(value) || Math.abs(value)>(field==='z'?2500:50000) || (size && value<100)) {
+    input.setCustomValidity(size?'Enter a size between '+measure(100,room.unit)+' and '+measure(field==='z'?2500:50000,room.unit)+'.':'Enter a position within '+measure(50000,room.unit)+' of the origin.');
     input.reportValidity();
     return;
   }
