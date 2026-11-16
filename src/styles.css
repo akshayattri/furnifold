@@ -2,8 +2,8 @@
 :root {
   font-family: 'Instrument Sans', system-ui, sans-serif;
   color: #252a27;
-  background: #f6f3ec;
-  --paper:#fffefa; --line:#e5e1d7; --green:#173a32; --muted:#62685f;
+  background: #fff;
+  --paper:#fff; --line:#e8e9eb; --green:#173a32; --muted:#62685f;
   --mono:'IBM Plex Mono', ui-monospace, monospace;
 }
 * { box-sizing:border-box; }
@@ -53,14 +53,14 @@ p { margin:7px 0 0; font-size:13px; color:var(--muted); line-height:1.5; }
 .segments { display:flex; gap:2px; padding:3px; border-radius:9px; background:#f0efe8; }
 .segments button { border:0; background:transparent; padding:6px 9px; }
 .segments button[aria-pressed=true] { background:white; box-shadow:0 1px 3px #20312626; }
-#canvas { background:#eeeee7; flex:1; min-height:clamp(350px,59vh,740px); display:grid; place-items:center; padding:16px; }
+#canvas { background:#f7f8fa; flex:1; min-height:clamp(350px,59vh,740px); display:grid; place-items:center; padding:16px; }
 .scene { display:block; width:100%; max-height:65vh; overflow:hidden; touch-action:none; }
-.room { fill:#fcfbf4; stroke:#364a40; stroke-width:4px; vector-effect:non-scaling-stroke; }
+.room { fill:#fff; stroke:#364a40; stroke-width:4px; vector-effect:non-scaling-stroke; }
 pattern path { fill:none; stroke:#dce3d8; stroke-width:8; }
 .dimension,.door,.window,.opening { fill:none; stroke:#748476; stroke-width:1px; vector-effect:non-scaling-stroke; }
 .door { stroke-width:1.5px; }
 .window { stroke:#7da7ab; stroke-width:6px; }
-.opening { stroke:#fcfbf4; stroke-width:5px; }
+.opening { stroke:#fff; stroke-width:5px; }
 .dim-label,.piece text { font:500 100px var(--mono); fill:#293b32; text-anchor:middle; paint-order:stroke; stroke:#fff8; stroke-width:7; }
 .piece text { dominant-baseline:central; pointer-events:none; }
 .piece[data-piece] { cursor:grab; }

@@ -3,13 +3,13 @@ const modal=document.querySelector('#modal');
 const key='furnifold.studio.v1';
 const uid=()=>crypto.randomUUID?.() || String(Date.now())+Math.random();
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const types={Living:'#dce8db',Bedroom:'#e7daca',Kitchen:'#efdfaf',Bathroom:'#d8e4ec',Hallway:'#e8e2ee',Other:'#e8e8e0'};
+const types={Living:'#f0eee8',Bedroom:'#f0ece9',Kitchen:'#f5f1ea',Bathroom:'#edf0f3',Hallway:'#f1f0f4',Other:'#f3f3f2'};
 const area=(w,h)=>w*h/1e6;
 const sqm=n=>new Intl.NumberFormat('en',{maximumFractionDigits:2}).format(n)+' m²';
 const roomKey=(p,r)=>'furnifold.project-room.'+p.id+'-'+r.id;
 const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
 let projects=read(key,[]), signed=sessionStorage.getItem('furnifold-studio-demo')==='1';
-let page=signed?'Projects':'Sign in', pid=null,rid=null,mode='2D', angle=0, storageError=false;
+let page=signed?'Projects':'Sign in', pid=null,rid=null,mode='2D', storageError=false;
 const project=()=>projects.find(p=>p.id===pid);
 const room=()=>project()?.rooms.find(r=>r.id===rid);
 function save(){try{localStorage.setItem(key,JSON.stringify(projects));storageError=false;}catch{storageError=true;}}
@@ -22,6 +22,7 @@ const example=()=>({id:uid(),name:'The Linden Apartment',kind:'Apartment',w:1000
   {id:uid(),type:'Bedroom',name:'Bedroom',x:0,y:4600,w:6000,h:3400}
 ]});
 const preview=example();
+let sandbox=null, renderVersion=0;
 function seed(p){
   const items={Living:[['Sofa','sofa',2100,900,500,650,850],['Coffee table','custom',1100,600,1100,1900,430]],
     Bedroom:[['Bed','bed',1600,2000,500,550,600],['Wardrobe','storage',1600,600,3200,2700,2100]],
@@ -53,29 +54,56 @@ function plan(p,thumb=false){
       (thumb?'':'<text class="room-area" x="'+(r.x+r.w/2)+'" y="'+(r.y+r.h/2+fs*1.2)+'" font-size="'+fs*.73+'">'+sqm(area(r.w,r.h))+'</text>')+'</g>';
     }).join('')+'</svg>';
 }
-function iso(p){
-  const swap=angle%2===1;
-  const width=swap?p.h:p.w,depth=swap?p.w:p.h;
-  function point(x,y,z){
-    const [u,v]=angle===0?[x,y]:angle===1?[y,p.w-x]:angle===2?[p.w-x,p.h-y]:[p.h-y,x];
-    return [u-v,(u+v)*.52-z];
+function updateFurniture(p,r,item){
+  const key=roomKey(p,r);
+  const data=read(key,{version:1,name:r.name,w:r.w,h:r.h,door:0,window:false,unit:'cm',active:0,layouts:[{name:'Current setup',items:[]}]});
+  const items=data.layouts[data.active].items;
+  const index=items.findIndex(i=>i.id===item.id);
+  if(index<0)items.push(item);else items[index]=item;
+  try{localStorage.setItem(key,JSON.stringify(data));return true;}
+  catch{app.querySelector('#sandbox-status').textContent='Could not save furniture in this browser.';return false;}
+}
+async function mountSandbox(p,version){
+  const host=app.querySelector('#sandbox');
+  if(!host)return;
+  const status=text=>{const node=host.querySelector('#sandbox-status');if(node)node.textContent=text;};
+  try{
+    const {startSandbox,models}=await import('./sandbox.mjs');
+    if(version!==renderVersion)return;
+    sandbox=startSandbox(host,{project:p,getItems:r=>furniture(p,r),commit:(r,i)=>{
+      if(!updateFurniture(p,r,i))return false;
+      selectRoom(r);
+      return true;
+    },select:selectRoom,status});
+    const catalog=app.querySelector('#sandbox-catalog');
+    catalog.innerHTML=models.map((m,i)=>'<button draggable="true" data-model="'+i+'"><strong>'+m.name+'</strong><small>'+m.w/10+' × '+m.h/10+' cm</small></button>').join('');
+    catalog.addEventListener('dragstart',event=>{
+      const item=event.target.closest('[data-model]');
+      if(item){event.dataTransfer.setData('application/x-furnifold-item',item.dataset.model);event.dataTransfer.effectAllowed='copy';}
+    });
+    status('Drag the canvas to orbit · Scroll to zoom · Right-drag to pan');
+  }catch(error){
+    if(version!==renderVersion)return;
+    status('3D could not load. Check your connection and WebGL support, or switch to 2D.');
+    console.error('Furnifold 3D initialization failed',error);
   }
-  const poly=(points,fill)=>'<polygon points="'+points.map(a=>point(...a).join(',')).join(' ')+'" fill="'+fill+'" stroke="#faf9f4" stroke-width="1.5" vector-effect="non-scaling-stroke"/>';
-  const flat=(x,y,w,h)=>[[x,y,0],[x+w,y,0],[x+w,y+h,0],[x,y+h,0]];
-  const floors=poly(flat(0,0,p.w,p.h),'#eceae0')+p.rooms.map(r=>poly(flat(r.x,r.y,r.w,r.h),types[r.type])).join('');
-  const objects=p.rooms.flatMap(r=>furniture(p,r).filter(i=>i.kind!=='rug').map(i=>{
-    const [w,h]=dimension(i);
-    return {x:i.x+r.x,y:i.y+r.y,w,h,z:i.z ?? ({bed:620,chair:850,storage:2100,sofa:820,desk:750}[i.kind]||700),kind:i.kind};
-  })).sort((a,b)=>point(a.x+a.w/2,a.y+a.h/2,0)[1]-point(b.x+b.w/2,b.y+b.h/2,0)[1]);
-  return '<svg class="floor iso" role="img" aria-label="3D axonometric furniture preview" viewBox="'+[-depth-600,-2800,width+depth+1200,(width+depth)*.52+3400].join(' ')+'">'+floors+objects.map(({x,y,w,h,z,kind})=>{
-    const bottom=flat(x,y,w,h),top=bottom.map(([x,y])=>[x,y,z]);
-    const visible=[[0,1],[1,2],[2,3],[3,0]].map(([a,b])=>({a,b,depth:(point(...bottom[a])[1]+point(...bottom[b])[1])/2})).sort((a,b)=>a.depth-b.depth).slice(-2);
-    return visible.map(({a,b},index)=>poly([bottom[a],bottom[b],top[b],top[a]],index?'#7c9286':'#536b60')).join('')+poly(top,kind==='storage'?'#bc997e':'#a3b9a8');
-  }).join('')+'</svg>';
+}
+function selectRoom(r){
+  rid=r.id;
+  const section=app.querySelector('.properties');
+  if(section)section.innerHTML=roomDetails(project(),r);
+  for(const row of app.querySelectorAll('[data-select]'))row.classList.toggle('active',row.dataset.select===r.id);
+}
+function roomDetails(p,r){
+  if(!r)return '<h2>Floor plan</h2><p>Select a room to edit its dimensions or furnish it.</p>';
+  const footprint=furniture(p,r).filter(i=>i.kind!=='rug').reduce((sum,i)=>sum+area(i.w,i.h),0);
+  return '<h2>'+esc(r.name)+'</h2><p>'+r.type+'</p><dl><dt>Inside dimensions</dt><dd>'+r.w/1000+' × '+r.h/1000+' m</dd><dt>Room area</dt><dd>'+sqm(area(r.w,r.h))+'</dd><dt>Furniture footprints</dt><dd>'+sqm(footprint)+'</dd></dl>'+button('room','Open room editor →','primary wide')+button('edit','Edit room dimensions','wide');
 }
 const button=(action,label,cls='')=>'<button class="'+cls+'" data-do="'+action+'">'+label+'</button>';
 const brand='<div class="brand"><span class="logo" aria-hidden="true">◩</span> Furnifold</div>';
 function render(){
+  const version=++renderVersion;
+  sandbox?.dispose();sandbox=null;
   if(!signed){
     app.innerHTML='<main class="login"><div class="auth">'+brand+'<div><h1>Plan a place<br>to call home.</h1><p>Open the prototype workspace to create a project, lay out rooms, and try furniture to scale.</p>'+button('login','Enter demo workspace →','primary')+'<small>Demo sign-in · projects stay in this browser</small></div></div><div class="entry-art">'+plan(preview,true)+'</div></main>';
     return;
@@ -88,12 +116,11 @@ function render(){
     body='<header class="bar">'+button('floor','← '+esc(p.name),'plain')+'<span>/</span><strong>'+esc(r.name)+'</strong><span class="grow"></span><span>'+sqm(area(r.w,r.h))+'</span></header><iframe title="'+esc(r.name)+' furniture editor" src="./room.html?'+query+'"></iframe>';
   }else if(page==='Floor'&&p){
     const used=p.rooms.reduce((sum,r)=>sum+area(r.w,r.h),0);
-    const footprint=r?furniture(p,r).filter(i=>i.kind!=='rug').reduce((sum,i)=>sum+area(i.w,i.h),0):0;
     body='<header class="bar">'+button('projects','← Projects','plain')+'<span>/</span><strong>'+esc(p.name)+'</strong><span class="grow"></span>'+button('settings','Floor dimensions')+'</header>'+
       '<div class="floor-head"><div><h1>'+esc(p.name)+'</h1><p>'+p.kind+' · '+p.rooms.length+' '+(p.rooms.length===1?'room':'rooms')+'</p></div>'+button('add','＋ Add room','primary')+'</div>'+
       '<div class="workbench"><aside class="room-list"><h2>Rooms</h2>'+(p.rooms.length?p.rooms.map(r=>'<button class="room-row '+(r.id===rid?'active':'')+'" data-select="'+r.id+'"><i style="background:'+types[r.type]+'"></i><span>'+esc(r.name)+'</span><small>'+sqm(area(r.w,r.h))+'</small></button>').join(''):'<p>Add a room to start your plan.</p>')+'</aside>'+
-      '<section class="workcanvas"><header><div class="view">'+button('2D','2D plan',mode==='2D'?'active':'')+button('3D','3D preview',mode==='3D'?'active':'')+'</div>'+(mode==='3D'?button('rotate','↻ Rotate view'):'<small>Top view · dimensions in metres</small>')+'</header><div class="drawing">'+(mode==='3D'?iso(p):plan(p))+'</div><footer><span>'+sqm(area(p.w,p.h))+' floor envelope</span><span>'+sqm(used)+' assigned to rooms</span></footer></section>'+
-      '<aside class="properties"><h2>'+ (r?esc(r.name):'Floor plan')+'</h2>'+(r?'<p>'+r.type+'</p><dl><dt>Inside dimensions</dt><dd>'+r.w/1000+' × '+r.h/1000+' m</dd><dt>Room area</dt><dd>'+sqm(area(r.w,r.h))+'</dd><dt>Furniture footprints</dt><dd>'+sqm(footprint)+'</dd></dl>'+button('room','Open room editor →','primary wide')+button('edit','Edit room dimensions','wide'):'<p>Select a room to edit its dimensions or furnish it.</p>')+'</aside></div>';
+      '<section class="workcanvas"><header><div class="view">'+button('2D','2D plan',mode==='2D'?'active':'')+button('3D','3D sandbox',mode==='3D'?'active':'')+'</div>'+(mode==='3D'?button('reset-view','Reset view'):'<small>Top view · dimensions in metres</small>')+'</header>'+(mode==='3D'?'<div id="sandbox" class="webgl"><p id="sandbox-status" role="status">Loading 3D canvas…</p></div><div class="catalog-tray"><h2>Furniture</h2><p>Drag into a room, or select an item and click to place it.</p><div id="sandbox-catalog"></div></div>':'<div class="drawing">'+plan(p)+'</div>')+'<footer><span>'+sqm(area(p.w,p.h))+' floor envelope</span><span>'+sqm(used)+' assigned to rooms</span></footer></section>'+
+      '<aside class="properties">'+roomDetails(p,r)+'</aside></div>';
   }else{
     const templates=page==='Templates';
     body='<header class="bar"><strong>'+page+'</strong><span class="grow"></span>'+(storageError?'<span role="alert">Browser saving unavailable</span>':'')+button('create','＋ New project','primary')+'</header><div class="dashboard">'+
@@ -101,6 +128,7 @@ function render(){
       '<h2>'+(templates?'Floor plan templates':'Your projects')+'</h2><div class="cards">'+(templates?'<button class="project-card" data-do="sample"><div class="thumb">'+plan(preview,true)+'</div><strong>Linden Apartment</strong><small>Apartment · 5 rooms</small></button>':projects.map(p=>'<button class="project-card" data-open="'+p.id+'"><div class="thumb">'+plan(p,true)+'</div><strong>'+esc(p.name)+'</strong><small>'+p.kind+' · '+p.rooms.length+' '+(p.rooms.length===1?'room':'rooms')+' · '+sqm(area(p.w,p.h))+'</small></button>').join('')+'<button class="new-card" data-do="create"><span>＋</span> Create a project</button>')+'</div></div>';
   }
   app.innerHTML='<div class="shell">'+shell+'<main class="workspace">'+body+'</main></div>';
+  if(page==='Floor'&&p&&mode==='3D')mountSandbox(p,version);
 }
 function form(title,fields,cta,apply){
   modal.innerHTML='<form><h2>'+title+'</h2>'+fields+'<p class="error" role="alert"></p><footer><button type="button" data-do="cancel">Cancel</button><button class="primary">'+cta+'</button></footer></form>';
@@ -142,11 +170,12 @@ function roomForm(existing){
   });
 }
 document.addEventListener('click',e=>{
-  const target=e.target.closest('[data-do],[data-open],[data-select],[data-room]');
+  const target=e.target.closest('[data-do],[data-open],[data-select],[data-room],[data-model]');
   if(!target)return;
   const d=target.dataset;
+  if(d.model!==undefined){sandbox?.arm(Number(d.model));return;}
   if(d.open){pid=d.open;rid=null;mode='2D';page='Floor';render();return;}
-  if(d.select||d.room){rid=d.select||d.room;render();return;}
+  if(d.select||d.room){rid=d.select||d.room;if(sandbox)selectRoom(room());else render();return;}
   switch(d.do){
     case 'login': signed=true;sessionStorage.setItem('furnifold-studio-demo','1');page='Projects';break;
     case 'logout': signed=false;sessionStorage.removeItem('furnifold-studio-demo');page='Sign in';break;
@@ -161,11 +190,12 @@ document.addEventListener('click',e=>{
     case 'floor': page='Floor';break;
     case 'room': page='Room';break;
     case '2D': case '3D': mode=d.do;break;
-    case 'rotate': angle=(angle+1)%4;break;
+    case 'reset-view': return sandbox?.reset();
     default:return;
   }
   render();
 });
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.open)sandbox?.cancel();});
 let drag=null,suppressClick=false;
 app.addEventListener('pointerdown',e=>{
   const node=e.target.closest('[data-room]');
