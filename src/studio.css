@@ -67,3 +67,10 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline-color:var(
 @media(max-width:1150px){.shell{grid-template-columns:170px minmax(0,1fr)}.workbench{grid-template-columns:145px minmax(0,1fr) 165px}.start-card{gap:8px;padding:10px}.start-card>.ui-icon{display:none}}
 @media(max-width:880px){.start-grid{grid-template-columns:1fr}.start-card{min-height:64px}}
 @media(max-width:760px){.rail{gap:8px}.rail nav{display:flex;flex-wrap:wrap;gap:4px}.nav-section{display:flex;gap:3px}.nav-section>small{display:none}.rail nav button{padding:6px}.rail .brand{margin:0}.workbench{grid-template-columns:1fr 1fr}.dashboard{padding:27px 15px}.room-tools p{max-width:190px}}
+
+/* Structure is drawn once above room fills, independent of room selection. */
+.room-fill{stroke:none}.space.chosen .room-fill{stroke:#187a59;stroke-width:3;stroke-dasharray:5 4}
+.structural-wall{stroke:#55585c;stroke-width:120;pointer-events:none}
+.plan-opening{cursor:pointer}.plan-opening:focus{outline:none;filter:drop-shadow(0 0 45px #5752bd)}
+.structure-panel{border-top:1px solid var(--line);margin-top:18px;padding-top:16px}.structure-panel p{font-size:12px;margin:8px 0}
+.plan-opening{pointer-events:bounding-box}

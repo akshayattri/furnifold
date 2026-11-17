@@ -28,3 +28,11 @@ On empty canvas, primary drag orbits, wheel zooms, and secondary drag pans. On a
 ## Visual direction
 
 Use the navigation and project-gallery hierarchy of [OpenArt Studio](https://openart.ai/suite/home). Keep navigation, cards, inspector, and catalog white with quiet neutral borders. Use a neutral canvas background and reserve material color for the model and floor plan.
+
+## Shared structure milestone
+
+`src/structure.mjs` derives a wall graph by grouping collinear rectangle edges, splitting at all endpoints, and recording the adjacent room/side on each interval. Each interval is rendered once, including partially shared edges. Its coordinate-based ID is stable while that geometry remains unchanged. Room moves/resizes and additions validate existing anchors before committing, so topology changes cannot silently discard openings.
+
+Project `openings` contain `id`, `wallId`, `type`, `offset`, `width`, `height`, `sill`, `hinge` (`start` / `end`) and `swing` (+1 toward plan bottom/right, -1 toward top/left). All dimensions use integer millimetres. Openings belong to the project structure across all layouts. Missing opening fields on legacy projects mean an empty list. Furniture storage keys and active layout indices are unchanged.
+
+SVG masks each opening out of its wall stroke and adds a window line or hinged quarter-circle symbol. Three.js splits the 2.7 m wall into solid spans, sill and lintel blocks; frames, glazing, and open door leaves remain selectable through raycasting. The room editor derives local opening coordinates for display and quarter-circle door-swing checks. Wall thickness is currently fixed at 120 mm centred on footprints; it is illustrative and does not change stored room dimensions. Arbitrary wall drawing, configurable thickness/height, and multi-storey geometry remain future work.

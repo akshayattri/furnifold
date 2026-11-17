@@ -1,3 +1,4 @@
+import {walls,pointOnWall} from './structure.mjs';
 import * as T from 'https://esm.sh/three@0.180.0';
 import { OrbitControls } from 'https://esm.sh/three@0.180.0/examples/jsm/controls/OrbitControls.js';
 
@@ -13,7 +14,7 @@ const defaults={sofa:820,bed:620,desk:750,chair:850,storage:2100,rug:20};
 const mm=n=>Math.round(n/50)*50;
 const metres=n=>n/1000;
 
-export function startSandbox(host,{project,getItems,commit,select,status}){
+export function startSandbox(host,{project,getItems,commit,select,editOpening,status}){
   const scene=new T.Scene();
   scene.background=new T.Color(0xf7f8fa);
   const camera=new T.PerspectiveCamera(45,1,.03,600);
@@ -59,9 +60,36 @@ export function startSandbox(host,{project,getItems,commit,select,status}){
     const w=metres(r.w),d=metres(r.h), x=metres(r.x),z=metres(r.y);
     const floor={Bathroom:0xe5e9ed,Kitchen:0xefeee9,Hallway:0xe9e9e9}[r.type]||0xece6dd;
     box(solid,x+w/2,-.018,z+d/2,w,.04,d,floor,false);
-    for(const edge of [[x+w/2,z,w,.065],[x+w/2,z+d,w,.065],[x,z+d/2,.065,d],[x+w,z+d/2,.065,d]]){
-      box(solid,edge[0],.16,edge[1],edge[2],.32,edge[3],0xfdfdff);
+  }
+  for(const wall of walls(project)){
+    const openings=(project.openings||[]).filter(o=>o.wallId===wall.id).sort((a,b)=>a.offset-b.offset);
+    function segment(start,length,bottom,height,color=0xfdfdff){
+      if(length<=0||height<=0)return;
+      const p=pointOnWall(wall,start+length/2);
+      return box(solid,metres(p.x),metres(bottom+height/2),metres(p.y),wall.axis==='h'?metres(length):.12,metres(height),wall.axis==='h'?.12:metres(length),color);
     }
+    let offset=0;
+    for(const o of openings){
+      segment(offset,o.offset-offset,0,2700);
+      segment(o.offset,o.width,0,o.sill);
+      segment(o.offset,o.width,o.sill+o.height,2700-o.sill-o.height);
+      // Frame and visible glazing / open door leaf carry the opening hit target.
+      for(const x of [o.offset,o.offset+o.width-45]){
+        const jamb=segment(x,45,o.sill,o.height,0x88796b);jamb.userData.openingId=o.id;
+      }
+      const header=segment(o.offset,o.width,o.sill+o.height-45,45,0x88796b);header.userData.openingId=o.id;
+      if(o.type==='window'){
+        segment(o.offset,o.width,o.sill,45,0x88796b);
+        const glass=segment(o.offset+45,o.width-90,o.sill+45,o.height-90,0x93c5d9);
+        glass.userData.openingId=o.id;
+      }else{
+        const hinge=pointOnWall(wall,o.offset+(o.hinge==='end'?o.width:0));
+        const leaf=box(solid,metres(hinge.x+(wall.axis==='v'?o.swing*o.width/2:0)),metres(o.height/2),metres(hinge.y+(wall.axis==='h'?o.swing*o.width/2:0)),wall.axis==='h'?.045:metres(o.width),metres(o.height),wall.axis==='h'?metres(o.width):.045,0xc5aa8d);
+        leaf.userData.openingId=o.id;
+      }
+      offset=o.offset+o.width;
+    }
+    segment(offset,wall.length-offset,0,2700);
   }
   function mesh(item){
     const w=metres(item.w),d=metres(item.h),h=metres(item.z??defaults[item.kind]??700);
@@ -153,7 +181,9 @@ export function startSandbox(host,{project,getItems,commit,select,status}){
       add(armed,point);
       return;
     }
-    const hit=ray.intersectObjects(objects.children,true)[0];
+    const picked=ray.intersectObjects([...objects.children,...solid.children],true)[0];
+    if(picked?.object.userData.openingId){e.stopImmediatePropagation();editOpening?.(picked.object.userData.openingId);return;}
+    const hit=picked&&objects.getObjectById(picked.object.id)?picked:null;
     if(!hit || !point)return;
     let node=hit.object;
     while(node.parent!==objects)node=node.parent;

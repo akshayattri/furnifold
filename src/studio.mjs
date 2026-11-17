@@ -1,3 +1,4 @@
+import {walls,openingError,structureError,pointOnWall,openingPlan} from './structure.mjs';
 const app=document.querySelector('#app');
 const modal=document.querySelector('#modal');
 const key='furnifold.studio.v1';
@@ -73,7 +74,7 @@ function plan(p,thumb=false){
       items.map(i=>{const [w,h]=dimension(i);return '<rect class="furniture" x="'+(r.x+i.x)+'" y="'+(r.y+i.y)+'" width="'+w+'" height="'+h+'" rx="65"/>';}).join('')+
       '<text x="'+(r.x+r.w/2)+'" y="'+(r.y+r.h/2)+'" font-size="'+fs+'">'+esc(r.name)+'</text>'+
       (thumb?'':'<text class="room-area" x="'+(r.x+r.w/2)+'" y="'+(r.y+r.h/2+fs*1.2)+'" font-size="'+fs*.73+'">'+sqm(area(r.w,r.h))+'</text>')+'</g>';
-    }).join('')+'</svg>';
+    }).join('')+walls(p).map(w=>{const a=pointOnWall(w,0),b=pointOnWall(w,w.length);return '<line class="structural-wall" x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'"/>';}).join('')+(p.openings||[]).map(o=>{const w=walls(p).find(w=>w.id===o.wallId);return w?openingPlan(w,o,thumb?'':'data-opening="'+o.id+'" class="plan-opening" tabindex="0" role="button" aria-label="Edit '+o.type+'"'):'';}).join('')+'</svg>';
 }
 function updateFurniture(p,r,item){
   const key=roomKey(p,r);
@@ -95,7 +96,7 @@ async function mountSandbox(p,version){
       if(!updateFurniture(p,r,i))return false;
       selectRoom(r);
       return true;
-    },select:selectRoom,status});
+    },select:selectRoom,editOpening:openingForm,status});
     const catalog=app.querySelector('#sandbox-catalog');
     catalog.innerHTML=models.map((m,i)=>'<button draggable="true" data-model="'+i+'"><strong>'+m.name+'</strong><small>'+m.w/10+' × '+m.h/10+' cm</small></button>').join('');
     catalog.addEventListener('dragstart',event=>{
@@ -115,10 +116,15 @@ function selectRoom(r){
   if(section)section.innerHTML=roomDetails(project(),r);
   for(const row of app.querySelectorAll('[data-select]'))row.classList.toggle('active',row.dataset.select===r.id);
 }
+function structurePanel(p,r){
+  const list=walls(p).filter(w=>!r||w.adjacent.some(a=>a.roomId===r.id));
+  const openings=(p.openings||[]).filter(o=>list.some(w=>w.id===o.wallId));
+  return '<section class="structure-panel"><h2>Walls & openings</h2><p>'+list.filter(w=>w.adjacent.length>1).length+' shared wall segments · 2.7 m high</p>'+button('add-door','Add door','wide')+button('add-window','Add window','wide')+openings.map(o=>'<button class="wide" data-opening="'+o.id+'">'+(o.type==='door'?'Door':'Window')+' · '+o.width/1000+' m · Edit</button>').join('')+'<p>Shared openings connect both rooms. Select an opening in either view to edit.</p>'+(p.structureRevision?'<p role="status">Structure changed. Review furniture and door swings in each layout.</p>':'')+'</section>';
+}
 function roomDetails(p,r){
-  if(!r)return '<h2>Floor plan</h2><p>Select a room to edit its dimensions or furnish it.</p>';
+  if(!r)return '<h2>Floor plan</h2><p>Select a room to edit its dimensions or furnish it.</p>'+structurePanel(p,r);
   const footprint=furniture(p,r).filter(i=>i.kind!=='rug').reduce((sum,i)=>sum+area(i.w,i.h),0);
-  return '<h2>'+esc(r.name)+'</h2><p>'+r.type+'</p><dl><dt>Inside dimensions</dt><dd>'+r.w/1000+' × '+r.h/1000+' m</dd><dt>Room area</dt><dd>'+sqm(area(r.w,r.h))+'</dd><dt>Furniture footprints</dt><dd>'+sqm(footprint)+'</dd></dl>'+button('room','Edit room layout →','primary wide')+button('edit','Edit room dimensions','wide')+(mode==='3D'?button('focus-room','Focus in 3D','wide'):'');
+  return '<h2>'+esc(r.name)+'</h2><p>'+r.type+'</p><dl><dt>Inside dimensions</dt><dd>'+r.w/1000+' × '+r.h/1000+' m</dd><dt>Room area</dt><dd>'+sqm(area(r.w,r.h))+'</dd><dt>Furniture footprints</dt><dd>'+sqm(footprint)+'</dd></dl>'+button('room','Edit room layout →','primary wide')+button('edit','Edit room dimensions','wide')+(mode==='3D'?button('focus-room','Focus in 3D','wide'):'')+structurePanel(p,r);
 }
 const button=(action,label,cls='')=>'<button class="'+cls+'" data-do="'+action+'">'+label+'</button>';
 const brand='<div class="brand"><span class="logo">'+icon('draw')+'</span> Furnifold</div>';
@@ -218,19 +224,44 @@ function roomForm(existing,type='Living',position=null){
     const next={id:r?.id||uid(),name:String(d.get('name')).trim(),type:d.get('type'),w:mm(d,'w'),h:mm(d,'h'),x:mm(d,'x'),y:mm(d,'y')};
     if(!next.name)return 'Enter a room name.';
     if(!fit(p,next))return 'Place the room inside the floor and clear of other rooms.';
+    const candidate={...p,rooms:r?p.rooms.map(a=>a.id===r.id?next:a):[...p.rooms,next]};
+    const error=structureError(candidate);if(error)return error;
     if(r) Object.assign(r,next);else p.rooms.push(next);
     rid=next.id;
   });
 }
+function openingForm(id=null,type='door'){
+  const p=project(),old=(p.openings||[]).find(o=>o.id===id);
+  type=old?.type||type;
+  const available=walls(p).filter(w=>w.length>=500);
+  if(!available.length){form('Add '+type,'<p>Add a room with a wall at least 0.5 m long first.</p>','Close',()=>null);return;}
+  const value=old||{wallId:available.find(w=>!room()||w.adjacent.some(a=>a.roomId===rid))?.id||available[0].id,offset:100,width:type==='door'?800:1200,height:type==='door'?2100:1200,sill:type==='door'?0:900,hinge:'start',swing:1};
+  const options=(name,values,current)=>'<label>'+name+'<select aria-label="'+name+'" name="'+name+'">'+values.map(([v,label])=>'<option value="'+v+'" '+(String(v)===String(current)?'selected':'')+'>'+esc(label)+'</option>').join('')+'</select></label>';
+  form((old?'Edit ':'Add ')+type,
+    options('Wall',available.map(w=>[w.id,w.adjacent.map(a=>p.rooms.find(r=>r.id===a.roomId).name+' '+a.side).join(' / ')+' · '+w.length/1000+' m']),value.wallId)+
+    '<p>Offset from the left or top of this segment. Keep 0.1 m at ends and between openings.</p>'+pair(number('Offset','offset',value.offset,0),number('Width','width',value.width,.3))+
+    pair(number('Height','height',value.height,.3),type==='window'?number('Sill height','sill',value.sill,0):'<p>Door starts at floor level.</p>')+
+    (type==='door'?options('Hinge',[['start','Left / top'],['end','Right / bottom']],value.hinge)+options('Swing',[[1,'Toward bottom / right'],[-1,'Toward top / left']],value.swing):'')+
+    (old?'<button type="button" data-do="remove-opening" data-id="'+old.id+'">Delete '+type+'</button>':''),old?'Save opening':'Add opening',d=>{
+      const next={id:old?.id||uid(),type,wallId:d.get('Wall'),offset:mm(d,'offset'),width:mm(d,'width'),height:mm(d,'height'),sill:type==='door'?0:mm(d,'sill'),hinge:type==='door'?d.get('Hinge'):'start',swing:type==='door'?Number(d.get('Swing')):1};
+      const error=openingError(p,next);if(error)return error;
+      p.openings=old?(p.openings||[]).map(o=>o.id===old.id?next:o):[...(p.openings||[]),next];
+      p.structureRevision=(p.structureRevision||0)+1;
+    });
+}
 document.addEventListener('click',e=>{
-  const target=e.target.closest('[data-do],[data-open],[data-select],[data-room],[data-model],[data-type]');
+  const target=e.target.closest('[data-do],[data-open],[data-select],[data-room],[data-model],[data-type],[data-opening]');
   if(!target)return;
   const d=target.dataset;
+  if(d.opening)return openingForm(d.opening);
   if(d.type&&roomSizes[d.type])return roomForm(false,d.type);
   if(d.model!==undefined){sandbox?.arm(Number(d.model));return;}
   if(d.open){pid=d.open;rid=null;mode='2D';page='Floor';render();return;}
   if(d.select||d.room){rid=d.select||d.room;if(sandbox)selectRoom(room());else render();return;}
   switch(d.do){
+    case 'add-door': return openingForm(null,'door');
+    case 'add-window': return openingForm(null,'window');
+    case 'remove-opening': project().openings=project().openings.filter(o=>o.id!==d.id);project().structureRevision=(project().structureRevision||0)+1;modal.close();finish();return;
     case 'login': signed=true;sessionStorage.setItem('furnifold-studio-demo','1');page='Projects';break;
     case 'logout': signed=false;sessionStorage.removeItem('furnifold-studio-demo');page='Sign in';break;
     case 'projects': page='Projects';break;
@@ -253,7 +284,7 @@ document.addEventListener('click',e=>{
   render();
 });
 modal.addEventListener('cancel',e=>{if(modal.dataset.busy)e.preventDefault();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.open)sandbox?.cancel();});
+document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.dataset.opening){e.preventDefault();openingForm(e.target.dataset.opening);}if(e.key==='Escape'&&!modal.open)sandbox?.cancel();});
 app.addEventListener('dragstart',e=>{
   const tile=e.target.closest('[data-type]');
   if(!tile)return;
@@ -291,7 +322,8 @@ app.addEventListener('pointermove',e=>{
   const next=new DOMPoint(e.clientX,e.clientY).matrixTransform(drag.matrix);
   const snap=n=>Math.round(n/100)*100;
   const x=snap(drag.x+next.x-drag.start.x),y=snap(drag.y+next.y-drag.start.y);
-  const valid=fit(drag.p,{...drag.r,x,y});
+  const moved={...drag.r,x,y};
+  const valid=fit(drag.p,moved)&&!structureError({...drag.p,rooms:drag.p.rooms.map(r=>r.id===moved.id?moved:r)});
   drag.next={x,y,valid};
   drag.node.setAttribute('transform','translate('+(x-drag.x)+' '+(y-drag.y)+')');
   drag.node.classList.toggle('invalid',!valid);

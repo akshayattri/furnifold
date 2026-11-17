@@ -1,3 +1,4 @@
+import {swingHits} from './structure.mjs';
 export const catalog = [
   ['Bed',1600,2000,'bed'], ['Desk',1200,600,'desk'], ['Wardrobe',1500,600,'storage'],
   ['Chair',500,500,'chair'], ['Rug',2000,2400,'rug'], ['Sofa',1800,850,'sofa']
@@ -31,6 +32,7 @@ const overlaps = (a,b) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y
 
 function swingIntersects(room, box) {
   const hingeX = 200, hingeY = room.h;
+  if(room.structuralOpenings?.some(o=>o.type==='door'&&swingHits(o,box)))return true;
   if (!room.door || box.x+box.w <= hingeX || box.y >= hingeY) return false;
   return Math.hypot(Math.max(0,box.x-hingeX), Math.max(0,hingeY-box.y-box.h)) < room.door;
 }
