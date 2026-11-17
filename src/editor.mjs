@@ -1,3 +1,4 @@
+import {roomOpenings,openingPlan} from './structure.mjs';
 import {sample,catalog,footprint,issues,factor,amount,measure} from './model.mjs';
 
 const $ = id => document.getElementById(id);
@@ -23,6 +24,15 @@ if (projectRoom) {
   room.w = Number(params.get('w')) || room.w;
   room.h = Number(params.get('h')) || room.h;
   room.name = params.get('name') || room.name;
+}
+
+if(projectRoom){
+  try{
+    const projects=JSON.parse(localStorage.getItem('furnifold.studio.v1')||'[]');
+    for(const p of projects)for(const r of p.rooms)if(p.id+'-'+r.id===projectRoom){
+      room.structuralOpenings=roomOpenings(p,r);
+    }
+  }catch{storageError=true;}
 }
 
 const layout = () => room.layouts[room.active];
@@ -91,7 +101,7 @@ function scene(option, prefix, furnished=false, interactive=false) {
     '<path class="dimension" d="M 0 -140 H '+w+' M 0 -190 v 100 M '+w+' -190 v 100 M -140 0 V '+h+' M -190 0 h 100 M -190 '+h+' h 100"/>'+
     '<text class="dim-label" x="'+w/2+'" y="-195">'+measure(w,room.unit)+'</text>'+
     '<text class="dim-label" transform="translate(-208 '+h/2+') rotate(-90)">'+measure(h,room.unit)+'</text>'+
-    door+win+highlighted+ordered.map(item=>furniture(item,furnished,interactive)).join('')+'</svg>';
+    door+win+(room.structuralOpenings||[]).map(o=>openingPlan(o.wall,o)).join('')+highlighted+ordered.map(item=>furniture(item,furnished,interactive)).join('')+'</svg>';
 }
 
 function renderCanvas() {
@@ -141,7 +151,7 @@ function render() {
   const warnings=issues(room,layout());
   $('issue-count').textContent=warnings.length;
   $('checks').innerHTML=(warnings.length?warnings.map((issue,index)=>'<button class="warning" data-issue="'+index+'"><span aria-hidden="true">!</span>'+escape(issue.text)+'</button>').join(''):'<p class="clear">✓ No fit warnings</p>')+
-    (room.door?'':'<p>Door swing unverified. Add a door in room dimensions.</p>');
+    (room.door||room.structuralOpenings?.some(o=>o.type==='door')?'':'<p>Door swing unverified. Add a door in '+(projectRoom?'the floor plan.':'room dimensions.')+'</p>');
 }
 
 function duplicate() {
@@ -195,7 +205,7 @@ function roomDialog(existing) {
 
 $('catalog').innerHTML=catalog.map(([name,w,h,kind],i)=>'<button data-catalog="'+i+'"><span aria-hidden="true">'+labels[kind]+'</span>'+name+'</button>').join('');
 $('new-room').onclick=()=>roomDialog(false);
-$('edit-room').onclick=()=>roomDialog(true);
+$('edit-room').onclick=()=>projectRoom?modal('Room structure','<p>Return to the floor plan to edit room dimensions, doors and windows shared across layouts and rooms.</p>','Close',()=>{}):roomDialog(true);
 $('sample').onclick=()=>modal('Open sample bedroom','<p>This replaces the current room in the editor. Use Undo to return to it during this session.</p>','Open sample',()=>{
   change(()=>{room=sample();selected=null;view='Plan';});
 });

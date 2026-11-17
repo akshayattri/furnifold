@@ -8,7 +8,7 @@
 4. Select a room from the plan or room list. Use **Edit room layout** for its furniture, dimensions, fit checks, and alternatives. Return to the project to see the room in context.
 5. In **3D sandbox**, select a room and use **Focus in 3D** to bring it into view. Orbit to inspect the whole home, or drag furniture into the room to change its active layout. Edits appear in 2D. Use **Reset view** to refit the whole floor.
 
-The current release supports one rectangular floor and rectangular room footprints. Imported images serve as tracing references. Future structural steps are irregular boundaries, shared walls, openings, and multiple storeys. Automatic vectorization is a separate workflow.
+The current release supports one rectangular floor and rectangular room footprints. Imported images serve as tracing references. Touching edges form shared wall segments. Use **Walls & openings** in either canvas view to add, edit, or delete a door or window. Openings use wall-relative offsets and appear in the room editor with door-swing fit checks. Structural edits that would orphan an opening are blocked; remove and recreate the opening around that edit. Future structural steps are irregular boundaries and multiple storeys. Automatic vectorization is a separate workflow.
 
 ## OpenArt review
 
